@@ -1,0 +1,57 @@
+{
+    "speechTranscription": "Hello, World!, This is an example clause.",
+    "pronunciationAssessment": {
+        "actualPhoneticTranscription": "ˈhɛ˥ləʊ ˌwɜː˩ld",
+        "expectedPhoneticTranscription": "ˈhɛləʊ ˌwɜːld",
+        "phonemeErrorDetails": [
+            {
+                "word": "world",
+                "errorType": "Substitution",
+                "actualPhoneme": "/wɜːl/",
+                "expectedPhoneme": "/wɜːd/",
+                "errorDescription": "The candidate substituted /wɜːl/ for /wɜːd/, altering the word ending.",
+                "improvementAdvice": "Focus on tongue placement at the end of the word to clearly distinguish /d/ from /l/.",
+                "errorStartIndex": 10,
+                "errorEndIndex": 15
+            }
+        ],
+        "wordStressErrorDetails": [
+            {
+                "word": "example",
+                "syllableBreakdown": [
+                    "ex",
+                    "am",
+                    "ple"
+                ],
+                "errorType": "Substitution",
+                "actualStressedSyllableIndex": 2,
+                "expectedStressedSyllableIndex": 1,
+                "errorDescription": "The candidate incorrectly stressed the second syllable instead of the first.",
+                "improvementAdvice": "Practice by clapping out the syllables and emphasizing the first syllable in 'example'.",
+                "errorStartIndex": 20,
+                "errorEndIndex": 27
+            }
+        ],
+        "intonationErrorDetails": {
+            "clauseText": "This is an example clause.",
+            "actualIntonationType": "Rising",
+            "expectedIntonationType": "Falling",
+            "errorDescription": "A rising intonation was used, which can make statements sound like questions.",
+            "improvementAdvice": "Practice declarative sentences by lowering your pitch at the end to achieve a falling tone.",
+            "errorStartIndex": 5,
+            "errorEndIndex": 29
+        }
+    },
+    "score": {
+        "overall": 8.5,
+        "pron": 8.5,
+        "lr": 8.5,
+        "fc": 8.5,
+        "gra": 8.5
+    },
+    "overallAdvices" : [
+        "You have a good grasp of English pronunciation, but there are a few areas that could use improvement.",
+        "Focus on differentiating between similar sounds, such as /d/ and /l/ in 'world'.",
+        "Work on using a falling intonation for declarative sentences to avoid sounding like you're asking a question."
+    ]
+}

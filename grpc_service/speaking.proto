@@ -1,0 +1,69 @@
+syntax = "proto3";
+
+package speaking;
+
+message SpeakingAssessmentRequest {
+    bytes audio = 1;
+}
+
+message SpeakingAssessment {
+    string speechTranscription = 1;
+    PronunciationAssessment pronunciationAssessment = 2;
+    Score score = 3;
+    repeated string overallAdvices = 4;
+}
+
+message PronunciationAssessment {
+    string actualPhoneticTranscription = 1;
+    string expectedPhoneticTranscription = 2;
+    repeated PhonemeErrorDetail phonemeErrorDetails = 3;
+    repeated WordStressErrorDetail wordStressErrorDetails = 4;
+    IntonationErrorDetail intonationErrorDetails = 5;
+}
+
+message PhonemeErrorDetail {
+    string transcribedWord = 1;
+    string expectedWord = 2;
+    string expectedPronunciation = 3;
+    string actualPronunciation = 4;
+    string errorType = 5;
+    int32 errorStartIndex = 6;
+    int32 errorEndIndex = 7;
+    string substituted = 8;
+    string errorDescription = 9;
+    string improvementAdvice = 10;
+}
+
+message WordStressErrorDetail {
+    string word = 1;
+    repeated string syllableBreakdown = 2;
+    string errorType = 3;
+    int32 actualStressedSyllableIndex = 4;
+    int32 expectedStressedSyllableIndex = 5;
+    string errorDescription = 6;
+    string improvementAdvice = 7;
+    int32 errorStartIndex = 8;
+    int32 errorEndIndex = 9;
+}
+
+message IntonationErrorDetail {
+    string clauseText = 1;
+    string actualIntonationType = 2;
+    string expectedIntonationType = 3;
+    string errorDescription = 4;
+    string improvementAdvice = 5;
+    int32 errorStartIndex = 6;
+    int32 errorEndIndex = 7;
+}
+
+message Score {
+    float overall = 1;
+    float fluencyCoherence = 2;
+    float lexicalResource = 3;
+    float grammaticalRangeAccuracy = 4;
+    float pronunciation = 5;
+}
+
+service SpeakingAssessmentService {
+    rpc AssessSpeaking(SpeakingAssessmentRequest) returns (SpeakingAssessment);
+}
