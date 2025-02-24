@@ -36,6 +36,13 @@ check: format lint test
 clean:
 	rm -rf __pycache__ grpc/*.pyc grpc/*_pb2.py grpc/*_pb2_grpc.py
 
+syncing:
+	rsync -avz --exclude='venv/' ./ automl@112.137.129.161:/home/automl/Xuanan/Linglooma/linglooma-core/ && \
+	ssh automl@112.137.129.161 'cd /home/automl/Xuanan/Linglooma/linglooma-core && \
+		source venv/bin/activate && \
+		pip3 install -r requirements.txt && \
+		pm2 restart main'
+
 # Default target
 .DEFAULT_GOAL := help
 help:

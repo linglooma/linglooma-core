@@ -1,76 +1,98 @@
 import json
-from typing import Dict, Any
-from services.transcribe import AudioTranscriber
-from config.client import openai_client as client
+from typing import Dict, Any, List, Literal
+from config import settings
+from services.transcribe import AudioProcessor
 from utils.audio import AudioReader
+from openai import AsyncOpenAI, BaseModel
+
+from utils.logging import log_execution_time
+import json
+from typing import List, Literal
+from pydantic import BaseModel
+from openai import AsyncOpenAI
+
+
+class PronunciationError(BaseModel):
+    word: str
+    syllableBreakdown: List[str]
+    errorType: Literal[
+        "Stress Misplacement",
+        "Vowel Reduction",
+        "Consonant Substitution",
+        "Insertion",
+        "Omission",
+        "None",
+    ]
+    actualStressedSyllableIndex: int
+    expectedStressedSyllableIndex: int
+    errorDescription: str
+    improvementAdvice: str
+    errorStartIndex: int
+    errorEndIndex: int
+
+
+class PronunciationErrorList(BaseModel):
+    errors: List[PronunciationError]
 
 
 class WordstressEvaluationService:
+    client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
     SYSTEM_PROMPT_TEMPLATE = """
     ### ROLE
     You are a phonetics and linguistics expert specializing in pronunciation analysis and stress pattern detection.
-    Your task is to analyze a given speech recording and provide detailed feedback, including phonetic breakdown, stress patterns, and pronunciation accuracy.
-    The errors type MUST be one of the following: ["Stress Misplacement", "Vowel Reduction", "Consonant Substitution", "Insertion", "Omission", or "None"].
+    Your task is to analyze speech recordings and provide detailed feedback ONLY for words with pronunciation errors.
+    The errors type MUST be one of the following: ["Stress Misplacement", "Vowel Reduction", "Consonant Substitution", "Insertion", "Omission"].
 
     ### TASKS
-    1. **Transcribe the Speech**: Convert the spoken audio into text.
-    2. **Syllable Division**: Break down each word into its phonetic syllables.
-    3. **Stress Identification**: Mark the primary and secondary stress in each word.
-    4. **Pronunciation Comparison**: Compare the user's spoken pronunciation with the correct pronunciation and identify errors.
-    5. **Provide Feedback**: Suggest improvements and highlight areas for practice. LIMIT THIS TO ONLY ONE SENTENCE.
-    6. **If actualStressedSyllableIndex equals expectedStressedSyllableIndex, set:**
-       - `errorType` = "None"
-       - `improvementAdvice` = "Good Job, Keep Practicing!"
-       - `errorStartIndex` = -1
-       - `errorEndIndex` = -1
-       - `errorDescription` = ""
+    1. Analyze the pronunciation of each word in the recording
+    2. ONLY report words that have pronunciation errors
+    3. For each error, provide:
+       - Word breakdown into syllables
+       - Type of error
+       - Actual vs expected stress patterns
+       - Clear description and improvement advice
+    4. Skip words with CORRECTLY STRESSED entirely
+    5. DO NOT INCLUDE ```json in the output
 
-    ### SCHEMA (Output Format)
-    The output should be a **list of objects**, where each object has the following structure:
+    ### OUTPUT FORMAT
+    Return a list of error objects ONLY. Each error object should have:
     ```
-    [
-        {{
-            "word": "example",
-            "syllableBreakdown": ["ex", "am", "ple"],
-            "errorType": "Substitution",  
-            "actualStressedSyllableIndex": 2,
-            "expectedStressedSyllableIndex": 1,
-            "errorDescription": "The candidate incorrectly stressed the second syllable instead of the first.",
-            "improvementAdvice": "Practice by clapping out the syllables and emphasizing the first syllable in 'example'.",
-            "errorStartIndex": 20,
-            "errorEndIndex": 27
-        }}
-    ]
+    {{
+        "word": "example",
+        "syllableBreakdown": ["ex", "am", "ple"],
+        "errorType": "Stress Misplacement",
+        "actualStressedSyllableIndex": 2,
+        "expectedStressedSyllableIndex": 1,
+        "errorDescription": "Concise description of the error",
+        "improvementAdvice": "Brief, actionable advice for improvement",
+        "errorStartIndex": 20,
+        "errorEndIndex": 27
+    }}
     ```
-    
+
     ### REQUIREMENTS
-    1. **Include all words**, even if repeated with different stress patterns.
-    2. **Clearly mark stress mismatches**.
-    3. **Provide pronunciation accuracy statistics** at the end.
-    4. **Include confidence levels** for each analysis.
-    5. **Identify mispronunciations, dialectal variations, or phoneme substitutions.**
-    6. **If actualStressedSyllableIndex equals expectedStressedSyllableIndex, set:**
-       - `errorType` = "None"
-       - `improvementAdvice` = "Good Job, Keep Practicing!"
-       - `errorStartIndex` = -1
-       - `errorEndIndex` = -1
-       - `errorDescription` = ""
-
+    1. Only include words with actual pronunciation errors
+    2. Ensure error descriptions are clear and specific
+    3. Provide brief, actionable improvement advice
+    4. Include accurate start and end indices for error highlighting
+    5. DO NOT include correctly pronounced words in the output
+    6. Return a JSON list with **ONLY stress misplacement errors**, following this structure:
     Actual text from audio: "{actual_text}"
     """
 
     @staticmethod
+    @log_execution_time
     async def analyze_pronunciation(
         actual_text: str, audio_path: str
-    ) -> Dict[str, Any]:
+    ) -> List[PronunciationError]:
         audio_content = AudioReader.encode_audio_to_base64(audio_path)
 
         system_prompt = WordstressEvaluationService.SYSTEM_PROMPT_TEMPLATE.format(
             actual_text=actual_text
         )
 
-        response = client.chat.completions.create(
-            model="gpt-4o-audio-preview",
+        response = await WordstressEvaluationService.client.chat.completions.create(
+            model="gpt-4o-mini-audio-preview-2024-12-17",
             modalities=["text"],
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -79,7 +101,7 @@ class WordstressEvaluationService:
                     "content": [
                         {
                             "type": "text",
-                            "text": "Provide detailed phonetic analysis with stress patterns and accuracy comparison, returning a structured list of objects. Ensure that when actualStressedSyllableIndex equals expectedStressedSyllableIndex, errorType is 'None' and all error fields are cleared.",
+                            "text": "Analyze the audio and return ONLY pronunciation errors in a structured list. Skip correctly pronounced words entirely.",
                         },
                         {
                             "type": "input_audio",
@@ -90,19 +112,21 @@ class WordstressEvaluationService:
             ],
             temperature=0,
         )
+
         analysis_result = response.choices[0].message.content
-        return json.loads(analysis_result)
+        print(analysis_result)
+        errors = json.loads(analysis_result)
+        return [PronunciationError(**error) for error in errors]
 
 
 async def main():
     audio_path = (
         "/home/xuananle/Documents/Linglooma/Linglooma-core/resources/audio/part2-2.mp3"
     )
-    actual_text = await AudioTranscriber.transcribe(audio_path)
-    result = await WordstressEvaluationService.analyze_pronunciation(
-        actual_text, audio_path
-    )
-    print(json.dumps(result, indent=4, ensure_ascii=False))
+    actual_text = await AudioProcessor.transcribe(audio_path)
+    result = [
+        await WordstressEvaluationService.analyze_pronunciation(actual_text, audio_path)
+    ]
 
 
 if __name__ == "__main__":

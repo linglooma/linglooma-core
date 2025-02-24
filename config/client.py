@@ -1,6 +1,8 @@
-from openai import OpenAI
+from openai import OpenAI, AsyncOpenAI
 from config import settings
 
-api_key = settings.OPENAI_API_KEY
-
-openai_client = OpenAI(api_key=api_key)
+openai_api_key = settings.OPENAI_API_KEY
+# Trick lord as fuck
+openai_client = AsyncOpenAI(
+    base_url="https://api.fireworks.ai/inference/v1", api_key=settings.FIREWORKS_API_KEY
+)

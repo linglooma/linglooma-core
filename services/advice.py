@@ -2,9 +2,26 @@ import asyncio
 from typing import List
 from config.client import openai_client as client
 import json
+from pydantic import BaseModel, Field
+
+from utils.logging import log_execution_time
+
+
+class AdviceSummarizerList(BaseModel):
+    advice: List[str] = Field(..., min_items=3, max_items=3)  # Exactly 3 items required
+
+
+from typing import List
+from pydantic import BaseModel, Field
+
+
+class AdviceSummarizerList(BaseModel):
+    advice: List[str] = Field(..., min_items=3, max_items=3)  # Exactly 3 items required
+
 
 class AdviceSummarizerService:
     @staticmethod
+    @log_execution_time
     async def summarize(text: dict) -> List[str]:
         prompt = """
             You are given a JSON object with pronunciation assessment details.
@@ -20,22 +37,35 @@ class AdviceSummarizerService:
                 "Try to make your voice go up at the end of questions."
             ]
         """
-        response = client.chat.completions.create(
-            model="gpt-4o",
+        response = await client.chat.completions.create(
+            model="accounts/fireworks/models/deepseek-v3",
             messages=[
                 {"role": "system", "content": prompt},
                 {"role": "user", "content": json.dumps(text)},
             ],
             temperature=0.5,
+            response_format={
+                "type": "json_object",
+                "schema": AdviceSummarizerList.model_json_schema(),
+            },
         )
+
+        raw_response = response.choices[0].message.content
+
         try:
-            parsed_response = json.loads(response.choices[0].message.content)
-            if isinstance(parsed_response, list):  # Ensure it's a list
+            parsed_response = json.loads(raw_response)
+
+            if isinstance(parsed_response, dict) and "advice" in parsed_response:
+                parsed_response = parsed_response["advice"]
+
+            if isinstance(parsed_response, list) and len(parsed_response) == 3:
                 return parsed_response
             else:
-                raise ValueError("Response is not a valid list.")
-        except json.JSONDecodeError:
-            raise ValueError("Failed to parse JSON response.")
+                raise ValueError(f"Invalid response format: {parsed_response}")
+
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Failed to parse JSON response: {e}")
+
 
 async def main():
     text = {
@@ -190,6 +220,7 @@ async def main():
     }
     result = await AdviceSummarizerService.summarize(text)
     print(result)
+
 
 if __name__ == "__main__":
     asyncio.run(main())

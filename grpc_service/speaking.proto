@@ -27,11 +27,13 @@ message PhonemeErrorDetail {
     string expectedPronunciation = 3;
     string actualPronunciation = 4;
     string errorType = 5;
-    int32 errorStartIndex = 6;
-    int32 errorEndIndex = 7;
+    int32 errorStartIndexWord = 6;
+    int32 errorEndIndexWord = 7;
     string substituted = 8;
     string errorDescription = 9;
     string improvementAdvice = 10;
+    int32 errorStartIndexTranscription = 11;
+    int32 errorEndIndexTranscription = 12;
 }
 
 message WordStressErrorDetail {
