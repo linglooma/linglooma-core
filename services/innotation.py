@@ -1,13 +1,17 @@
 import asyncio
 import logging
 import time
+import instructor
 import librosa
 import numpy as np
 import json
+import time
+import logging
+from config.client import groq_client
 import re
 from typing import Dict, Literal, Tuple
 from dataclasses import dataclass
-from pydantic import BaseModel, Field, Json
+from pydantic import BaseModel, Field
 from scipy.signal import savgol_filter
 from sklearn.preprocessing import StandardScaler
 from config.client import openai_client
@@ -36,10 +40,6 @@ class IntonationFeedback(BaseModel):
     errorEndIndex: int
 
 
-import librosa
-import numpy as np
-
-
 def extract_pitch_faster(y: np.ndarray, sr: int) -> np.ndarray:
     """Trích xuất pitch nhanh hơn bằng `librosa.yin`"""
     # Chia nhỏ tín hiệu âm thanh thành cửa sổ nhỏ hơn
@@ -48,7 +48,7 @@ def extract_pitch_faster(y: np.ndarray, sr: int) -> np.ndarray:
         fmin=librosa.note_to_hz("C2"),
         fmax=librosa.note_to_hz("C7"),
         sr=sr,
-        hop_length=256,
+        hop_length=512,
     )
 
     # Xử lý NaN thành 0
@@ -272,13 +272,15 @@ class InnotationEvaluationService:
         """
 
         try:
-            response = await openai_client.chat.completions.create(
-                model="accounts/fireworks/models/deepseek-v3",
-                response_format={"type": "json_object"},
+            client = instructor.from_groq(groq_client, mode = instructor.Mode.JSON)
+            response = await client.chat.completions.create(
+                model="llama-3.2-1b-preview",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0,
+                response_model=IntonationFeedback
             )
-            return json.loads(response.choices[0].message.content.strip())
+            print(response.model_dump_json())
+            return response.model_dump()
         except Exception as e:
             logging.error(e)
             return {
@@ -288,9 +290,6 @@ class InnotationEvaluationService:
                 "errorStartIndex": rule_analysis.error_start,
                 "errorEndIndex": rule_analysis.error_end,
             }
-
-    import time
-    import logging
 
     @staticmethod
     @log_execution_time
@@ -367,9 +366,9 @@ class InnotationEvaluationService:
 
 async def main():
     audio_path = (
-        "/home/xuananle/Documents/Linglooma/Linglooma-core/resources/audio/part2-2.mp3"
+        "/home/xuananle/Documents/Linglooma/Linglooma-core/resources/audio/recorded_audio.mp3"
     )
-    actual_text = "I rarely like learning English. I find it youthful"
+    actual_text = "Commit to speaking English every day, even without a partner. Practice thinking in English to improve fluency and accuracy. The more you read, the more natural you become."
     result = await InnotationEvaluationService.process_audio(actual_text, audio_path)
     print(json.dumps(result, indent=4))
 

@@ -18,7 +18,7 @@ class WordTimeStampList(BaseModel):
     words: List[WordTimeStamp]
 
 
-class AudioTranscribe(BaseModel):
+class AudioTranscription(BaseModel):
     transcription: str
     word_timestamps: WordTimeStampList
 
@@ -34,7 +34,7 @@ class AudioProcessor:
 
     @staticmethod
     @log_execution_time
-    async def transcribe(file_path: str) -> AudioTranscribe:
+    async def transcribe(file_path: str) -> AudioTranscription:
         openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
 
         if not os.path.isfile(file_path):
@@ -47,6 +47,7 @@ class AudioProcessor:
                     file=audio_file,
                     timestamp_granularities=["word"],
                     response_format="verbose_json",
+                    prompt="The Language in the conversation is in English",
                 )
 
             transcript_text = response.text
@@ -59,18 +60,20 @@ class AudioProcessor:
                 for word_info in response.words
             ]
 
-            return AudioTranscribe(
+            return AudioTranscription(
                 transcription=transcript_text,
                 word_timestamps=WordTimeStampList(words=word_timestamps),
             )
         except Exception as e:
-            logging.error(f"Error during transcription: {e}")
-            raise RuntimeError(f"Error during transcription: {e}")
+            logging.error(f"Error in transcribing audio: {e}")
+            return AudioTranscription(
+                transcription="", word_timestamps=WordTimeStampList(words=[])
+            )
 
 
 async def main():
     result = await AudioProcessor.transcribe(
-        "/home/xuananle/Documents/Linglooma/Linglooma-core/resources/audio/part2-2.mp3"
+        "/home/xuananle/Documents/Linglooma/Linglooma-core/resources/audio/recorded_audio.mp3"
     )
     print(result.model_dump_json(indent=4))
 

@@ -24,7 +24,7 @@ test:
 	pytest tests/
 
 lint:
-	ruff check . --exclude venv --fix
+	ruff check . --fix --unsafe-fixes --exclude venv 
 
 format:
 	ruff format . --exclude venv

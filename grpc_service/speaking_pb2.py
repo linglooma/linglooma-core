@@ -4,47 +4,46 @@
 # source: grpc_service/speaking.proto
 # Protobuf Python Version: 5.29.0
 """Generated protocol buffer code."""
+
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import descriptor_pool as _descriptor_pool
 from google.protobuf import runtime_version as _runtime_version
 from google.protobuf import symbol_database as _symbol_database
 from google.protobuf.internal import builder as _builder
+
 _runtime_version.ValidateProtobufRuntimeVersion(
-    _runtime_version.Domain.PUBLIC,
-    5,
-    29,
-    0,
-    '',
-    'grpc_service/speaking.proto'
+    _runtime_version.Domain.PUBLIC, 5, 29, 0, "", "grpc_service/speaking.proto"
 )
 # @@protoc_insertion_point(imports)
 
 _sym_db = _symbol_database.Default()
 
 
-
-
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1bgrpc_service/speaking.proto\x12\x08speaking\"*\n\x19SpeakingAssessmentRequest\x12\r\n\x05\x61udio\x18\x01 \x01(\x0c\"\xad\x01\n\x12SpeakingAssessment\x12\x1b\n\x13speechTranscription\x18\x01 \x01(\t\x12\x42\n\x17pronunciationAssessment\x18\x02 \x01(\x0b\x32!.speaking.PronunciationAssessment\x12\x1e\n\x05score\x18\x03 \x01(\x0b\x32\x0f.speaking.Score\x12\x16\n\x0eoverallAdvices\x18\x04 \x03(\t\"\xa2\x02\n\x17PronunciationAssessment\x12#\n\x1b\x61\x63tualPhoneticTranscription\x18\x01 \x01(\t\x12%\n\x1d\x65xpectedPhoneticTranscription\x18\x02 \x01(\t\x12\x39\n\x13phonemeErrorDetails\x18\x03 \x03(\x0b\x32\x1c.speaking.PhonemeErrorDetail\x12?\n\x16wordStressErrorDetails\x18\x04 \x03(\x0b\x32\x1f.speaking.WordStressErrorDetail\x12?\n\x16intonationErrorDetails\x18\x05 \x01(\x0b\x32\x1f.speaking.IntonationErrorDetail\"\xde\x02\n\x12PhonemeErrorDetail\x12\x17\n\x0ftranscribedWord\x18\x01 \x01(\t\x12\x14\n\x0c\x65xpectedWord\x18\x02 \x01(\t\x12\x1d\n\x15\x65xpectedPronunciation\x18\x03 \x01(\t\x12\x1b\n\x13\x61\x63tualPronunciation\x18\x04 \x01(\t\x12\x11\n\terrorType\x18\x05 \x01(\t\x12\x1b\n\x13\x65rrorStartIndexWord\x18\x06 \x01(\x05\x12\x19\n\x11\x65rrorEndIndexWord\x18\x07 \x01(\x05\x12\x13\n\x0bsubstituted\x18\x08 \x01(\t\x12\x18\n\x10\x65rrorDescription\x18\t \x01(\t\x12\x19\n\x11improvementAdvice\x18\n \x01(\t\x12$\n\x1c\x65rrorStartIndexTranscription\x18\x0b \x01(\x05\x12\"\n\x1a\x65rrorEndIndexTranscription\x18\x0c \x01(\x05\"\x84\x02\n\x15WordStressErrorDetail\x12\x0c\n\x04word\x18\x01 \x01(\t\x12\x19\n\x11syllableBreakdown\x18\x02 \x03(\t\x12\x11\n\terrorType\x18\x03 \x01(\t\x12#\n\x1b\x61\x63tualStressedSyllableIndex\x18\x04 \x01(\x05\x12%\n\x1d\x65xpectedStressedSyllableIndex\x18\x05 \x01(\x05\x12\x18\n\x10\x65rrorDescription\x18\x06 \x01(\t\x12\x19\n\x11improvementAdvice\x18\x07 \x01(\t\x12\x17\n\x0f\x65rrorStartIndex\x18\x08 \x01(\x05\x12\x15\n\rerrorEndIndex\x18\t \x01(\x05\"\xce\x01\n\x15IntonationErrorDetail\x12\x12\n\nclauseText\x18\x01 \x01(\t\x12\x1c\n\x14\x61\x63tualIntonationType\x18\x02 \x01(\t\x12\x1e\n\x16\x65xpectedIntonationType\x18\x03 \x01(\t\x12\x18\n\x10\x65rrorDescription\x18\x04 \x01(\t\x12\x19\n\x11improvementAdvice\x18\x05 \x01(\t\x12\x17\n\x0f\x65rrorStartIndex\x18\x06 \x01(\x05\x12\x15\n\rerrorEndIndex\x18\x07 \x01(\x05\"\x84\x01\n\x05Score\x12\x0f\n\x07overall\x18\x01 \x01(\x02\x12\x18\n\x10\x66luencyCoherence\x18\x02 \x01(\x02\x12\x17\n\x0flexicalResource\x18\x03 \x01(\x02\x12 \n\x18grammaticalRangeAccuracy\x18\x04 \x01(\x02\x12\x15\n\rpronunciation\x18\x05 \x01(\x02\x32p\n\x19SpeakingAssessmentService\x12S\n\x0e\x41ssessSpeaking\x12#.speaking.SpeakingAssessmentRequest\x1a\x1c.speaking.SpeakingAssessmentb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
+    b'\n\x1bgrpc_service/speaking.proto\x12\x08speaking"*\n\x19SpeakingAssessmentRequest\x12\r\n\x05\x61udio\x18\x01 \x01(\x0c"\xad\x01\n\x12SpeakingAssessment\x12\x1b\n\x13speechTranscription\x18\x01 \x01(\t\x12\x42\n\x17pronunciationAssessment\x18\x02 \x01(\x0b\x32!.speaking.PronunciationAssessment\x12\x1e\n\x05score\x18\x03 \x01(\x0b\x32\x0f.speaking.Score\x12\x16\n\x0eoverallAdvices\x18\x04 \x03(\t"\xa2\x02\n\x17PronunciationAssessment\x12#\n\x1b\x61\x63tualPhoneticTranscription\x18\x01 \x01(\t\x12%\n\x1d\x65xpectedPhoneticTranscription\x18\x02 \x01(\t\x12\x39\n\x13phonemeErrorDetails\x18\x03 \x03(\x0b\x32\x1c.speaking.PhonemeErrorDetail\x12?\n\x16wordStressErrorDetails\x18\x04 \x03(\x0b\x32\x1f.speaking.WordStressErrorDetail\x12?\n\x16intonationErrorDetails\x18\x05 \x01(\x0b\x32\x1f.speaking.IntonationErrorDetail"\xde\x02\n\x12PhonemeErrorDetail\x12\x17\n\x0ftranscribedWord\x18\x01 \x01(\t\x12\x14\n\x0c\x65xpectedWord\x18\x02 \x01(\t\x12\x1d\n\x15\x65xpectedPronunciation\x18\x03 \x01(\t\x12\x1b\n\x13\x61\x63tualPronunciation\x18\x04 \x01(\t\x12\x11\n\terrorType\x18\x05 \x01(\t\x12\x1b\n\x13\x65rrorStartIndexWord\x18\x06 \x01(\x05\x12\x19\n\x11\x65rrorEndIndexWord\x18\x07 \x01(\x05\x12\x13\n\x0bsubstituted\x18\x08 \x01(\t\x12\x18\n\x10\x65rrorDescription\x18\t \x01(\t\x12\x19\n\x11improvementAdvice\x18\n \x01(\t\x12$\n\x1c\x65rrorStartIndexTranscription\x18\x0b \x01(\x05\x12"\n\x1a\x65rrorEndIndexTranscription\x18\x0c \x01(\x05"\x84\x02\n\x15WordStressErrorDetail\x12\x0c\n\x04word\x18\x01 \x01(\t\x12\x19\n\x11syllableBreakdown\x18\x02 \x03(\t\x12\x11\n\terrorType\x18\x03 \x01(\t\x12#\n\x1b\x61\x63tualStressedSyllableIndex\x18\x04 \x01(\x05\x12%\n\x1d\x65xpectedStressedSyllableIndex\x18\x05 \x01(\x05\x12\x18\n\x10\x65rrorDescription\x18\x06 \x01(\t\x12\x19\n\x11improvementAdvice\x18\x07 \x01(\t\x12\x17\n\x0f\x65rrorStartIndex\x18\x08 \x01(\x05\x12\x15\n\rerrorEndIndex\x18\t \x01(\x05"\xce\x01\n\x15IntonationErrorDetail\x12\x12\n\nclauseText\x18\x01 \x01(\t\x12\x1c\n\x14\x61\x63tualIntonationType\x18\x02 \x01(\t\x12\x1e\n\x16\x65xpectedIntonationType\x18\x03 \x01(\t\x12\x18\n\x10\x65rrorDescription\x18\x04 \x01(\t\x12\x19\n\x11improvementAdvice\x18\x05 \x01(\t\x12\x17\n\x0f\x65rrorStartIndex\x18\x06 \x01(\x05\x12\x15\n\rerrorEndIndex\x18\x07 \x01(\x05"\x84\x01\n\x05Score\x12\x0f\n\x07overall\x18\x01 \x01(\x02\x12\x18\n\x10\x66luencyCoherence\x18\x02 \x01(\x02\x12\x17\n\x0flexicalResource\x18\x03 \x01(\x02\x12 \n\x18grammaticalRangeAccuracy\x18\x04 \x01(\x02\x12\x15\n\rpronunciation\x18\x05 \x01(\x02\x32p\n\x19SpeakingAssessmentService\x12S\n\x0e\x41ssessSpeaking\x12#.speaking.SpeakingAssessmentRequest\x1a\x1c.speaking.SpeakingAssessmentb\x06proto3'
+)
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
-_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'grpc_service.speaking_pb2', _globals)
+_builder.BuildTopDescriptorsAndMessages(
+    DESCRIPTOR, "grpc_service.speaking_pb2", _globals
+)
 if not _descriptor._USE_C_DESCRIPTORS:
-  DESCRIPTOR._loaded_options = None
-  _globals['_SPEAKINGASSESSMENTREQUEST']._serialized_start=41
-  _globals['_SPEAKINGASSESSMENTREQUEST']._serialized_end=83
-  _globals['_SPEAKINGASSESSMENT']._serialized_start=86
-  _globals['_SPEAKINGASSESSMENT']._serialized_end=259
-  _globals['_PRONUNCIATIONASSESSMENT']._serialized_start=262
-  _globals['_PRONUNCIATIONASSESSMENT']._serialized_end=552
-  _globals['_PHONEMEERRORDETAIL']._serialized_start=555
-  _globals['_PHONEMEERRORDETAIL']._serialized_end=905
-  _globals['_WORDSTRESSERRORDETAIL']._serialized_start=908
-  _globals['_WORDSTRESSERRORDETAIL']._serialized_end=1168
-  _globals['_INTONATIONERRORDETAIL']._serialized_start=1171
-  _globals['_INTONATIONERRORDETAIL']._serialized_end=1377
-  _globals['_SCORE']._serialized_start=1380
-  _globals['_SCORE']._serialized_end=1512
-  _globals['_SPEAKINGASSESSMENTSERVICE']._serialized_start=1514
-  _globals['_SPEAKINGASSESSMENTSERVICE']._serialized_end=1626
+    DESCRIPTOR._loaded_options = None
+    _globals["_SPEAKINGASSESSMENTREQUEST"]._serialized_start = 41
+    _globals["_SPEAKINGASSESSMENTREQUEST"]._serialized_end = 83
+    _globals["_SPEAKINGASSESSMENT"]._serialized_start = 86
+    _globals["_SPEAKINGASSESSMENT"]._serialized_end = 259
+    _globals["_PRONUNCIATIONASSESSMENT"]._serialized_start = 262
+    _globals["_PRONUNCIATIONASSESSMENT"]._serialized_end = 552
+    _globals["_PHONEMEERRORDETAIL"]._serialized_start = 555
+    _globals["_PHONEMEERRORDETAIL"]._serialized_end = 905
+    _globals["_WORDSTRESSERRORDETAIL"]._serialized_start = 908
+    _globals["_WORDSTRESSERRORDETAIL"]._serialized_end = 1168
+    _globals["_INTONATIONERRORDETAIL"]._serialized_start = 1171
+    _globals["_INTONATIONERRORDETAIL"]._serialized_end = 1377
+    _globals["_SCORE"]._serialized_start = 1380
+    _globals["_SCORE"]._serialized_end = 1512
+    _globals["_SPEAKINGASSESSMENTSERVICE"]._serialized_start = 1514
+    _globals["_SPEAKINGASSESSMENTSERVICE"]._serialized_end = 1626
 # @@protoc_insertion_point(module_scope)

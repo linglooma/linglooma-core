@@ -1,6 +1,6 @@
 import asyncio
 from typing import List
-from config.client import openai_client as client
+from config.client import groq_client
 import json
 from pydantic import BaseModel, Field
 
@@ -37,34 +37,20 @@ class AdviceSummarizerService:
                 "Try to make your voice go up at the end of questions."
             ]
         """
+        import instructor
+
+        client = instructor.from_groq(groq_client, mode=instructor.Mode.JSON)
         response = await client.chat.completions.create(
-            model="accounts/fireworks/models/deepseek-v3",
+            model="llama-3.2-1b-preview",
             messages=[
                 {"role": "system", "content": prompt},
                 {"role": "user", "content": json.dumps(text)},
             ],
             temperature=0.5,
-            response_format={
-                "type": "json_object",
-                "schema": AdviceSummarizerList.model_json_schema(),
-            },
+            response_model=AdviceSummarizerList,
         )
 
-        raw_response = response.choices[0].message.content
-
-        try:
-            parsed_response = json.loads(raw_response)
-
-            if isinstance(parsed_response, dict) and "advice" in parsed_response:
-                parsed_response = parsed_response["advice"]
-
-            if isinstance(parsed_response, list) and len(parsed_response) == 3:
-                return parsed_response
-            else:
-                raise ValueError(f"Invalid response format: {parsed_response}")
-
-        except json.JSONDecodeError as e:
-            raise ValueError(f"Failed to parse JSON response: {e}")
+        return response.advice
 
 
 async def main():

@@ -1,6 +1,5 @@
 from nltk.corpus import cmudict
 import pyphen
-import re
 
 cmu_dict = cmudict.dict()
 dic = pyphen.Pyphen(lang="en")

@@ -1,53 +1,88 @@
-from pydantic import Json, BaseModel, Field
-from typing import Literal, List
-from config.client import openai_client as client
+from typing import Iterable, Literal, Optional
+from utils.logging import log_execution_time as an_yeu_lananh
+import instructor
+from openai import AsyncOpenAI
+from pydantic import BaseModel, Field
 import json
 import eng_to_ipa as ipa
-from utils.logging import log_execution_time
+from config.settings import OPENAI_API_KEY
 from utils.phoneme import update_transcription_error_indices
 
-
-class PhonemeError(BaseModel):
+class PhonemeErrorDetail(BaseModel):
     transcribedWord: str
     expectedWord: str
     expectedPronunciation: str
     actualPronunciation: str
     errorType: Literal["substitution", "omission"]
     errorStartIndexWord: int
+    errorStartIndexTranscription: Optional[int]
+    errorEndIndexTranscription: Optional[int]
     errorEndIndexWord: int
     substituted: str
     errorDescription: str = Field(..., max_length=150)
     improvementAdvice: str = Field(..., max_length=150)
 
-
 class PronunciationAnalysisResponse(BaseModel):
-    expectedText: str
-    phonemeErrors: List[PhonemeError]
-
+    actualPhoneticTranscription: str
+    expectedPhoneticTranscription: str
+    phonemeErrorDetails: list[PhonemeErrorDetail]
 
 class PronunciationEvaluationService:
-    UNIFIED_PROMPT = """You are an expert in phonetic transcription and pronunciation analysis. Your task is to analyze a given text and its IPA transcription to:
-    1. Predict the intended text based on pronunciation errors
-    2. Identify specific pronunciation errors
+    client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+    instructor_client = instructor.from_openai(client, mode=instructor.Mode.JSON)
+    def __init__(self):
+        pass    
+    PREDICTION_PROMPT = (
+        "You are an expert in phonetic transcription and pronunciation analysis. "
+        "Your task is to predict the intended words based on the given actual text "
+        "and corresponding phonetic transcription, accounting for pronunciation errors, mispronunciations, and contextual meaning. "
+        "Your goal is to provide the most accurate intended transcription based on phonetic similarities and logical sentence structure.\n\n"
+        "### Guidelines:\n"
+        "- **Prioritize vowel shifts** (e.g., /ɛr/ → /ɪə/ in 'rarely' vs. 'really'). \n"
+        "- **Correct common consonant substitutions** (e.g., /θ/ → /s/ in 'think' vs. 'sink').\n"
+        "- **Identify and correct phonetic omissions** (e.g., /ˈæŋɡɚ/ → 'anger' instead of 'angry').\n"
+        "- **Correct phonetic additions** (e.g., /ˈʌv/ → 'of' instead of 'have').\n"
+        "- **Correct words that are phonetically close** but mispronounced (e.g., /ˈrɛrli/ → 'really' instead of 'rarely').\n"
+        "- If a word in IPA suggests a common speech error, infer the correct intended word.\n"
+        "- Ensure the sentence remains grammatically and contextually meaningful.\n"
+        "- Return ONLY the corrected sentence without explanations or additional text.\n\n"
+        "- Remember to consider the logical context of the sentence.\n\n"
+        "### Examples:\n"
+        "**Input:**\n"
+        "Actual Text: 'I rarely like reading English. I find it youthful.'\n"
+        "Actual IPA: aɪ ˈrɛrli laɪk ˈrɛdɪŋ ˈɪŋlɪʃ. aɪ faɪnd ɪt ˈjuθfəl.\n"
+        "**Output:** I really like reading English. I find it useful.\n\n"
+        "**Input:**\n"
+        "Actual Text: 'I am very anger.'\n"
+        "Actual IPA: aɪ æm ˈvɛri ˈæŋɡɚ.\n"
+        "**Output:** I am very angry.\n\n"
+        "**Input:**\n"
+        "Actual Text: 'She bought a three pair of shoes.'\n"
+        "Actual IPA: ʃi bɔt ə θri pɛr ʌv ʃuz.\n"
+        "**Output:** She bought three pairs of shoes.\n"
+    )
 
-    ### Guidelines for Text Prediction:
-    - Prioritize vowel shifts (e.g., /ɛr/ → /ɪə/ in 'rarely' vs. 'really')
-    - Correct common consonant substitutions (e.g., /θ/ → /s/ in 'think' vs. 'sink')
-    - Identify and correct phonetic omissions (e.g., /ˈæŋɡɚ/ → 'anger' instead of 'angry')
-    - Correct phonetic additions (e.g., /ˈʌv/ → 'of' instead of 'have')
-    - Ensure sentences remain grammatically and contextually meaningful
-    - **ERROR INDEX START FROM ZERO NOT ONE**
+    COMPARISON_PROMPT = """
+        You are a phonetic analysis expert. Compare the actual and expected IPA pronunciations to identify specific pronunciation errors.
+        Input Format:
+        - actual_word: The word/phrase being analyzed
+        - expected_word: The expected word/phrase
+        - actual_pronunciation: IPA string of actual pronunciation
+        - expected_pronunciation: IPA string of expected pronunciation
 
-    ### Guidelines for Error Analysis:
-    - Focus on significant pronunciation errors
-    - Provide precise error positions
-    - Use IPA notation in descriptions
-    - Keep improvement advice concise and specific
-    
-    ### Required Output Schema:
-    {
-        "expectedText": string,  // The corrected text based on pronunciation analysis
-        "phonemeErrors": [{
+        Required Output Schema:
+        [{
+            "transcribedWord": string,
+            "expectedWord": string,
+            "expectedPronunciation": string,
+            "actualPronunciation": string,
+            "errorType": "substitution" | "omission",
+            "errorStartIndex": number,
+            "errorEndIndex": number,
+            "substituted": string,
+            "errorDescription": string,
+            "improvementAdvice": string
+        },{
             "transcribedWord": string,
             "expectedWord": string,
             "expectedPronunciation": string,
@@ -59,88 +94,134 @@ class PronunciationEvaluationService:
             "errorDescription": string,
             "improvementAdvice": string
         }]
-    }
 
-    ### Examples:
-    Input:
-    Text: "I rarely like reading English. I find it youthful."
-    IPA: "aɪ ˈrɛrli laɪk ˈrɛdɪŋ ˈɪŋlɪʃ. aɪ faɪnd ɪt ˈjuθfəl."
+        Guidelines:
+        1. Focus on the most significant error if multiple exist
+        2. error_start and error_end must be precise word positions
+        3. **Provide only ONE sentence for improvement_advice**. Do NOT write multiple sentences or explanations.
+        4. **DO NOT include additional context** beyond the structured response format.
+        5. Description should use IPA notation with forward slashes
+        Analyze the following pronunciations, focusing on the most important error:
 
-    Output:
-    {
-        "expectedText": "I really like reading English. I find it useful.",
-        "phonemeErrors": [
-            {
-                "transcribedWord": "rarely",
-                "expectedWord": "really",
-                "expectedPronunciation": "ˈrɪli",
-                "actualPronunciation": "ˈrɛrli",
-                "errorType": "substitution",
-                "errorStartIndex": 2,
-                "errorEndIndex": 3,
-                "substituted": "ɛr",
-                "errorDescription": "/ˈrɛrli/ was pronounced instead of /ˈrɪli/",
-                "improvementAdvice": "Replace /ɛr/ with /ɪ/ in 'really'"
-            },
-            {
-                "transcribedWord": "youthful",
-                "expectedWord": "useful",
-                "expectedPronunciation": "ˈjusfəl",
-                "actualPronunciation": "ˈjuθfəl",
-                "errorType": "substitution",
-                "errorStartIndex": 2,
-                "errorEndIndex": 3,
-                "substituted": "juθ",
-                "errorDescription": "/ˈjuθfəl/ was pronounced instead of /ˈjusfəl/",
-                "improvementAdvice": "Replace /θ/ with /s/ in 'useful'"
-            }
-        ]
-    }
-
-    Analyze the following text and provide corrections and error analysis:
+        EXAMPLE:
+        ```
+        [{
+            "transcribedWord": "rarely",
+            "expectedWord": "really",
+            "expectedPronunciation": "/ˈrɪli/",
+            "actualPronunciation": "/ˈrɛrli/",
+            "errorType": "substitution",
+            "errorStartIndex": 1,
+            "errorEndIndex": 2,
+            "substituted": "ɛr",
+            "errorDescription": "The /ɪ/ sound was substituted with /ɛr/.",
+            "improvementAdvice": "Practice the /ɪ/ sound by relaxing the tongue and slightly raising it towards the front of the mouth."
+        },
+        {
+            "transcribedWord": "youthful",
+            "expectedWord": "useful",
+            "expectedPronunciation": "/ˈjusfəl/",
+            "actualPronunciation": "/ˈjuθfəl/",
+            "errorType": "substitution",
+            "errorStartIndex": 3,
+            "errorEndIndex": 4,
+            "substituted": "θ",
+            "errorDescription": "The /s/ sound was substituted with /θ/.",
+            "improvementAdvice": "Focus on placing the tip of the tongue close to the roof of the mouth just behind the teeth to create the /s/ sound."
+        }]
+        ```
     """
 
+    @an_yeu_lananh
     @staticmethod
-    @log_execution_time
-    async def pronunciation_assessment(actual_text: str) -> Json:
-        actual_ipa = ipa.convert(actual_text)
-        response = await client.chat.completions.create(
-            model="accounts/fireworks/models/deepseek-v3",
-            response_format={
-                "type": "json_object",
-                "schema": PronunciationAnalysisResponse.model_json_schema(),
-            },
+    async def predict_intended_word(actual_text: str, actual_ipa: str) -> str:
+        """Predicts the intended words based on phonetic transcription and logical context."""
+        response = await PronunciationEvaluationService.instructor_client.chat.completions.create(
+            model="gpt-4o-mini",
             messages=[
                 {
                     "role": "system",
-                    "content": PronunciationEvaluationService.UNIFIED_PROMPT,
+                    "content": PronunciationEvaluationService.PREDICTION_PROMPT,
                 },
-                {"role": "user", "content": f"Text: {actual_text}\nIPA: {actual_ipa}"},
+                {
+                    "role": "user",
+                    "content": (
+                        f"Actual Text: {actual_text}\n"
+                        f"Actual IPA: {actual_ipa}\n"
+                        "Predict the most likely intended sentence based on phonetics and context."
+                        "REMEMBER TO BASED ON LOGICAL CONTEXT."
+                    ),
+                },
             ],
+            response_model=str,
+            temperature=0,
+        )   
+        return response
+    
+    
+    @staticmethod
+    def generate_comparison_prompt(
+        actual_word: str, expect_word: str, actual_ipa: str, expected_ipa: str
+    ) -> str:
+        """Generate a structured prompt for the comparison."""
+        return f"""Input:
+        actual_word: {actual_word}
+        expected_word: {expect_word}
+        actual_pronunciation: {actual_ipa}
+        expected_pronunciation: {expected_ipa}
+
+        IDENTIFY ALL PRONUNCIATION ERROR AND PROVIDE ANALYSIS FOLLOWING THE SCHEMA EXACTLY.
+        """
+
+    @an_yeu_lananh
+    @staticmethod
+    async def compare_phonemes(actual_word: str, expected_word: str, actual_ipa: str, expected_ipa: str) -> list[PhonemeErrorDetail]:
+        prompt = PronunciationEvaluationService.generate_comparison_prompt(
+            actual_word, expected_word, actual_ipa, expected_ipa
+        )
+        result = {}
+        result["actualPhoneticTranscription"] = actual_ipa
+        result["expectedPhoneticTranscription"] = expected_ipa
+        
+        response = await PronunciationEvaluationService.instructor_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": PronunciationEvaluationService.COMPARISON_PROMPT,
+                },
+                {"role": "user", "content": prompt},
+            ],
+            response_model= Iterable[PhonemeErrorDetail],
             temperature=0,
         )
-        analysis = json.loads(response.choices[0].message.content)
-        analysis["phonemeErrors"] = update_transcription_error_indices(
-            actual_text, analysis["phonemeErrors"]
-        )
-        result = {
-            "actualPhoneticTranscription": actual_ipa,
-            "expectedPhoneticTranscription": ipa.convert(analysis["expectedText"]),
-            "phonemeErrorDetails": analysis["phonemeErrors"],
-        }
+        return response
 
-        return result
+
+    @an_yeu_lananh
+    @staticmethod
+    async def pronunciation_assessment(actual_text: str) -> PronunciationAnalysisResponse:
+        """Analyzes pronunciation by detecting errors in phonetic transcription."""
+        actualPhoneticTranscription = ipa.convert(actual_text)
+        expected_text = await PronunciationEvaluationService.predict_intended_word(actual_text, actualPhoneticTranscription)
+        expectedPhoneticTranscription = ipa.convert(expected_text)
+
+        phoneme_errors = await PronunciationEvaluationService.compare_phonemes(
+            actual_text, expected_text, actualPhoneticTranscription, expectedPhoneticTranscription
+        )
+        phoneme_errors = update_transcription_error_indices(actual_text, phoneme_errors)
+
+        return PronunciationAnalysisResponse(
+            actualPhoneticTranscription=actualPhoneticTranscription,
+            expectedPhoneticTranscription=expectedPhoneticTranscription,
+            phonemeErrorDetails=phoneme_errors
+        )
 
 
 if __name__ == "__main__":
     actual_text = "I rarely like reading English. I find it youthful."
-
     async def main():
-        result = await PronunciationEvaluationService.pronunciation_assessment(
-            actual_text
-        )
-        print(json.dumps(result, indent=4, ensure_ascii=False))
-
+        result = await PronunciationEvaluationService.pronunciation_assessment(actual_text)
+        print(json.dumps(result.model_dump(), indent = 4, ensure_ascii= True))
     import asyncio
-
     asyncio.run(main())
