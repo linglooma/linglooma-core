@@ -1,16 +1,16 @@
 import asyncio
 import logging
-from pydantic import Json
 import json
-from copy import deepcopy
 from services.advice import AdviceSummarizerService
 from services.phoneme import PronunciationEvaluationService
-from services.transcribe import AudioTranscriber
-from services.grading import grade_ielts_response
+from services.transcribe import AudioProcessor
+from services.grading import IELTSGradingService
 from services.wordstress import (
     WordstressEvaluationService,
 )
 from services.innotation import InnotationEvaluationService
+from typing import Any, Dict
+from utils.logging import log_execution_time
 
 
 class SpeakingEvaluationService:
@@ -18,57 +18,61 @@ class SpeakingEvaluationService:
         pass
 
     @staticmethod
-    async def evaluate(audio_path: str) -> Json[any]:
+    @log_execution_time
+    async def evaluate(audio_path: str) -> Dict[str, Any]:
         logging.basicConfig(level=logging.INFO)
         logging.info("Starting speech evaluation")
-        
+
         speaking_evaluation = {}
+
         try:
-            actual_text, score = await asyncio.gather(
-                AudioTranscriber.transcribe(audio_path), grade_ielts_response(audio_path)
+            audio_transcription = await AudioProcessor.transcribe(audio_path)
+            logging.info("Transcription completed successfully")
+            logging.info(audio_transcription.transcription)
+            speaking_evaluation["speechTranscription"] = (
+                audio_transcription.transcription
             )
-            logging.info("Transcription and scoring completed")
-            logging.info(f"Transcription: {actual_text}")
-            logging.info(f"Score: {score}")
-            speaking_evaluation["speechTranscription"] = actual_text
-            
             (
                 pronunciationAssessment,
                 wordstressAssessment,
-                InnotationAssessment,
+                intonationAssessment,
             ) = await asyncio.gather(
-                PronunciationEvaluationService.pronunciation_assessment(actual_text),
-                WordstressEvaluationService.analyze_pronunciation(actual_text, audio_path),
-                InnotationEvaluationService.process_audio(actual_text, audio_path),
+                PronunciationEvaluationService.pronunciation_assessment(
+                    audio_transcription.transcription
+                ),
+                WordstressEvaluationService.evaluate_stress(
+                    audio_transcription, audio_path
+                ),
+                InnotationEvaluationService.process_audio(
+                    audio_transcription.transcription, audio_path
+                ),
             )
-            
-            logging.info("Pronunciation, word stress, and intonation assessments completed")
-            logging.info(f"Pronunciation: {pronunciationAssessment}")
-            logging.info(f"Word stress: {wordstressAssessment}")
-            logging.info(f"Intonation: {InnotationAssessment}")
-            
-            speaking_evaluation["pronunciationAssessment"] = pronunciationAssessment
+            speaking_evaluation["pronunciationAssessment"] = pronunciationAssessment.model_dump()
             speaking_evaluation["pronunciationAssessment"]["wordStressErrorDetails"] = (
                 wordstressAssessment
             )
             speaking_evaluation["pronunciationAssessment"]["intonationErrorDetails"] = (
-                InnotationAssessment
+                intonationAssessment
             )
-            speaking_evaluation["score"] = score
-            
-            speaking_evaluation["overallAdvices"] = await AdviceSummarizerService.summarize(
-                deepcopy(speaking_evaluation)
+            (score, overallAdvices) = await asyncio.gather(
+                IELTSGradingService.grading(speaking_evaluation.copy()),
+                AdviceSummarizerService.summarize(speaking_evaluation.copy()),
             )
+
+            speaking_evaluation["overallAdvices"] = overallAdvices
+            speaking_evaluation["score"] = score.model_dump()
+
             logging.info("Evaluation completed successfully")
+            print(json.dumps(speaking_evaluation, indent=4, ensure_ascii=False))
             return speaking_evaluation
+
         except Exception as e:
             logging.error(f"Error in speech evaluation: {e}")
-            return {}
+            return speaking_evaluation
+
 
 if __name__ == "__main__":
-    audio_path = (
-        "/home/xuananle/Documents/Linglooma/Linglooma-core/resources/audio/part2-2.mp3"
-    )
+    audio_path = "/home/xuananle/Documents/Linglooma/Linglooma-core/resources/audio/recorded_audio.mp3"
 
     async def main():
         result = await SpeakingEvaluationService.evaluate(audio_path)

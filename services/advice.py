@@ -1,10 +1,27 @@
 import asyncio
 from typing import List
-from config.client import openai_client as client
+from config.client import groq_client
 import json
+from pydantic import BaseModel, Field
+
+from utils.logging import log_execution_time
+
+
+class AdviceSummarizerList(BaseModel):
+    advice: List[str] = Field(..., min_items=3, max_items=3)  # Exactly 3 items required
+
+
+from typing import List
+from pydantic import BaseModel, Field
+
+
+class AdviceSummarizerList(BaseModel):
+    advice: List[str] = Field(..., min_items=3, max_items=3)  # Exactly 3 items required
+
 
 class AdviceSummarizerService:
     @staticmethod
+    @log_execution_time
     async def summarize(text: dict) -> List[str]:
         prompt = """
             You are given a JSON object with pronunciation assessment details.
@@ -20,22 +37,21 @@ class AdviceSummarizerService:
                 "Try to make your voice go up at the end of questions."
             ]
         """
-        response = client.chat.completions.create(
-            model="gpt-4o",
+        import instructor
+
+        client = instructor.from_groq(groq_client, mode=instructor.Mode.JSON)
+        response = await client.chat.completions.create(
+            model="llama-3.2-1b-preview",
             messages=[
                 {"role": "system", "content": prompt},
                 {"role": "user", "content": json.dumps(text)},
             ],
             temperature=0.5,
+            response_model=AdviceSummarizerList,
         )
-        try:
-            parsed_response = json.loads(response.choices[0].message.content)
-            if isinstance(parsed_response, list):  # Ensure it's a list
-                return parsed_response
-            else:
-                raise ValueError("Response is not a valid list.")
-        except json.JSONDecodeError:
-            raise ValueError("Failed to parse JSON response.")
+
+        return response.advice
+
 
 async def main():
     text = {
@@ -190,6 +206,7 @@ async def main():
     }
     result = await AdviceSummarizerService.summarize(text)
     print(result)
+
 
 if __name__ == "__main__":
     asyncio.run(main())

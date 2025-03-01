@@ -1,14 +1,21 @@
 import asyncio
+import logging
+import time
+import instructor
 import librosa
 import numpy as np
 import json
+import time
+import logging
+from config.client import groq_client
 import re
-from typing import Dict, Tuple
+from typing import Dict, Literal, Tuple
 from dataclasses import dataclass
-from pydantic import Json
+from pydantic import BaseModel, Field
 from scipy.signal import savgol_filter
 from sklearn.preprocessing import StandardScaler
 from config.client import openai_client
+from utils.logging import log_execution_time
 
 
 @dataclass
@@ -21,6 +28,31 @@ class IntonationAnalysis:
     pitch_statistics: Dict[str, float] = None
     phonetic_features: Dict[str, float] = None
     acoustic_features: Dict[str, float] = None
+
+
+class IntonationFeedback(BaseModel):
+    expectedIntonationType: Literal[
+        "Rising", "Falling", "Rising-Falling", "Falling-Rising", "Level", "Complex"
+    ]
+    errorDescription: str = Field(..., max_length=200)
+    improvementAdvice: str = Field(..., max_length=150)
+    errorStartIndex: int
+    errorEndIndex: int
+
+
+def extract_pitch_faster(y: np.ndarray, sr: int) -> np.ndarray:
+    """Trích xuất pitch nhanh hơn bằng `librosa.yin`"""
+    # Chia nhỏ tín hiệu âm thanh thành cửa sổ nhỏ hơn
+    f0 = librosa.yin(
+        y,
+        fmin=librosa.note_to_hz("C2"),
+        fmax=librosa.note_to_hz("C7"),
+        sr=sr,
+        hop_length=512,
+    )
+
+    # Xử lý NaN thành 0
+    return np.nan_to_num(f0)
 
 
 @dataclass
@@ -205,112 +237,116 @@ class InnotationEvaluationService:
         )
 
     @staticmethod
-    def get_gpt_analysis(
+    @log_execution_time
+    async def get_gpt_analysis(
         text: str, actual_intonation: str, rule_analysis: IntonationAnalysis
     ) -> Dict:
+        """Phân tích và tối ưu phản hồi từ AI"""
+        if not isinstance(text, str):
+            raise TypeError(f"Expected `text` to be a string but got {type(text)}")
+
         prompt = f"""
-        You are an expert phonetics analyst specializing in speech intonation patterns. Your task is to analyze the provided speech segment and provide detailed feedback.
-            INPUT CONTEXT:
-            Text: "{text}"
-            Detected Intonation Pattern: "{actual_intonation}"
-            Rule-based Analysis Results:
-            - Expected Intonation Type: {rule_analysis.expected_type}
-            - Analysis Confidence Score: {rule_analysis.confidence:.2f}
-            - Matching Rule Pattern: {rule_analysis.rule_matched}
-            - Detected Acoustic Features: {rule_analysis.acoustic_features}
+        You are an expert in phonetics analysis. Analyze the speech below and provide feedback.
+        
+        📌 **INPUT:**
+        - **Text:** "{text}"
+        - **Detected Intonation:** "{actual_intonation}"
+        - **Expected Intonation:** "{rule_analysis.expected_type}"
+        - **Analysis Confidence:** {rule_analysis.confidence:.2f}
 
-            ANALYSIS REQUIREMENTS:
-            1. Compare the detected intonation against expected patterns
-            2. Identify specific points where intonation deviates from expected patterns
-            3. Provide actionable feedback for improvement
-            4. Include precise position markers for error locations
-            5. Consider linguistic context and semantic meaning
-            6. The errorDescription should be concise and informative and MAXIMUM 2 SENTENCES
-            7. The improvementAdvice should be specific and actionable and ONLY ONE SENTENCE
+        ⚠️ **TASK:**
+        - Identify if intonation is incorrect.
+        - If wrong, explain **briefly** (MAX **2 sentences**).
+        - Give **1 short improvement tip**.
 
-            RESPONSE FORMAT:
-            Return a JSON object with the following structure (no additional text or markdown or ```json):
-            {{
-                "expectedIntonationType": string,     // The correct intonation pattern that should be used
-                "errorDescription": string,           // Detailed analysis of what went wrong. MAX 2 SENTENCES.
-                "improvementAdvice": string,          // Specific, actionable advice for improvement. ONLY ONE SENTENCE.
-                "errorStartIndex": number,            // Starting character position of the error
-                "errorEndIndex": number              // Ending character position of the error
-            }}
+        📜 **RESPONSE FORMAT:**
+        {{
+            "expectedIntonationType": "Falling",
+            "errorDescription": "The intonation is unclear. Try a lower pitch at the end.",
+            "improvementAdvice": "Practice lowering your pitch on the final word.",
+            "errorStartIndex": {rule_analysis.error_start},
+            "errorEndIndex": {rule_analysis.error_end}
+        }}
 
-            INTONATION TYPE GUIDELINES:
-            - Rising: Used for questions, uncertainty, or continuation
-            - Falling: Used for statements, commands, or completion
-            - Rising-Falling: Used for emphasis or contrast
-            - Falling-Rising: Used for uncertainty or reservation
-            - Level: Used for listing or incomplete thoughts
-            - Complex: Multiple intonation patterns within the same utterance
-
-            ERROR DESCRIPTION GUIDELINES:
-            - Be specific about the nature of the error
-            - Reference the acoustic features detected
-            - Explain why the current intonation is inappropriate
-            - Consider the semantic context
-
-            IMPROVEMENT ADVICE GUIDELINES:
-            - Provide practical exercises or techniques
-            - Give examples of correct intonation patterns
-            - Suggest specific words or syllables to focus on
-            - Include rhythm and stress considerations
-
-            Example Outputs:
-            {{
-                "expectedIntonationType": "Rising",
-                "errorDescription": "The sentence is a yes/no question but uses a falling intonation, making it sound like a statement.",
-                "improvementAdvice": "Practice raising your pitch by 20-30Hz on the final syllable, try saying 'up' in your mind as you reach the end of the question.",
-                "errorStartIndex": 15,
-                "errorEndIndex": 25
-            }}
-
-            {{
-                "expectedIntonationType": "Complex",
-                "errorDescription": "The conditional statement requires a rising pattern on the if-clause followed by a falling pattern on the main clause.",
-                "improvementAdvice": "Break the sentence into two parts, rise on 'if-clause' to show continuation, then fall on the main clause to show completion.",
-                "errorStartIndex": 0,
-                "errorEndIndex": 45
-            }}
+        ❌ **DO NOT return any markdown or extra text. Only JSON.**
         """
+
         try:
-            response = openai_client.chat.completions.create(
-                model="gpt-4o",
+            client = instructor.from_groq(groq_client, mode = instructor.Mode.JSON)
+            response = await client.chat.completions.create(
+                model="llama-3.2-1b-preview",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0,
+                response_model=IntonationFeedback
             )
-            gpt_analysis = response.choices[0].message.content.strip()
-            return json.loads(gpt_analysis)
-        except Exception:
+            print(response.model_dump_json())
+            return response.model_dump()
+        except Exception as e:
+            logging.error(e)
             return {
                 "expectedIntonationType": rule_analysis.expected_type,
-                "errorDescription": "An error occurred during analysis",
-                "improvementAdvice": "Try again with a different input",
+                "errorDescription": "Error processing analysis.",
+                "improvementAdvice": "Try re-recording with clearer intonation.",
                 "errorStartIndex": rule_analysis.error_start,
                 "errorEndIndex": rule_analysis.error_end,
             }
 
     @staticmethod
-    async def process_audio(actual_text: str, audio_path: str) -> Json:
+    @log_execution_time
+    async def process_audio(actual_text: str, audio_path: str) -> dict:
+        """Xử lý âm thanh, phân tích trọng âm, và đo thời gian từng bước"""
         try:
+            logging.info("🔄 Bắt đầu xử lý audio...")
+            start_total = time.perf_counter()
+
+            start = time.perf_counter()
             y, sr = librosa.load(audio_path, sr=None)
-            f0, _, _ = librosa.pyin(
-                y, fmin=librosa.note_to_hz("C2"), fmax=librosa.note_to_hz("C7")
-            )
-            f0_cleaned = f0[~np.isnan(f0)] if np.any(~np.isnan(f0)) else np.zeros(1)
+            end = time.perf_counter()
+            logging.info(f"✅ Load audio hoàn thành (⏱️ {end - start:.4f}s)")
+
+            start = time.perf_counter()
+            f0_cleaned = extract_pitch_faster(y, sr)
+            end = time.perf_counter()
+            logging.info(f"✅ Trích xuất pitch (YIN) hoàn thành (⏱️ {end - start:.4f}s)")
+
+            start = time.perf_counter()
             if not actual_text:
-                raise ValueError("Failed to transcribe audio")
+                raise ValueError(
+                    "🚨 Lỗi: Không thể chuyển đổi giọng nói thành văn bản!"
+                )
+            end = time.perf_counter()
+            logging.info(f"✅ Kiểm tra transcription hoàn thành (⏱️ {end - start:.4f}s)")
+
+            start = time.perf_counter()
             rule_analysis = InnotationEvaluationService.analyze_intonation(
                 actual_text, f0_cleaned
             )
+            end = time.perf_counter()
+            logging.info(
+                f"✅ Phân tích trọng âm bằng quy tắc hoàn thành (⏱️ {end - start:.4f}s)"
+            )
+
+            start = time.perf_counter()
             actual_intonation, _ = (
                 InnotationEvaluationService.rules.analyze_pitch_pattern(f0_cleaned)
             )
-            gpt_analysis = InnotationEvaluationService.get_gpt_analysis(
+            end = time.perf_counter()
+            logging.info(
+                f"✅ Xác định intonation thực tế hoàn thành (⏱️ {end - start:.4f}s)"
+            )
+
+            start = time.perf_counter()
+            gpt_analysis = await InnotationEvaluationService.get_gpt_analysis(
                 actual_text, actual_intonation, rule_analysis
             )
+            end = time.perf_counter()
+            logging.info(f"✅ Gọi OpenAI API hoàn thành (⏱️ {end - start:.4f}s)")
+
+            end_total = time.perf_counter()
+            logging.info(
+                f"✅ Hoàn thành toàn bộ xử lý (⏱️ {end_total - start_total:.4f}s)"
+            )
+
             return {
                 "clauseText": actual_text,
                 "actualIntonationType": actual_intonation,
@@ -322,15 +358,17 @@ class InnotationEvaluationService:
                 "errorStartIndex": gpt_analysis.get("errorStartIndex", 0),
                 "errorEndIndex": gpt_analysis.get("errorEndIndex", 0),
             }
+
         except Exception as e:
+            logging.error(f"🚨 Lỗi trong process_audio: {e}")
             return {"error": str(e), "errorType": type(e).__name__}
 
 
 async def main():
     audio_path = (
-        "/home/xuananle/Documents/Linglooma/Linglooma-core/resources/audio/part2-2.mp3"
+        "/home/xuananle/Documents/Linglooma/Linglooma-core/resources/audio/recorded_audio.mp3"
     )
-    actual_text = "I rarely like learning English. I find it youthful"
+    actual_text = "Commit to speaking English every day, even without a partner. Practice thinking in English to improve fluency and accuracy. The more you read, the more natural you become."
     result = await InnotationEvaluationService.process_audio(actual_text, audio_path)
     print(json.dumps(result, indent=4))
 

@@ -1,22 +1,37 @@
-"""
-TLDR:
-1. Transcribe Audio: Use a model like Whisper to convert speech to text. Mispronounced words will be transcribed incorrectly.
-2. Correct Words: Use a model like GPT-4 to predict the intended words.
-3. Convert to IPA: Turn both the transcribed and intended words into IPA.
-4. Detect Errors: Compare the IPA strings to spot pronunciation mistakes.
-5. Enhance Output: Refine the response with extra data (e.g., Language Confidence API).
-"""
-
-from pydantic import Json
-from config.client import openai_client as client
+from typing import Iterable, Literal, Optional
+from utils.logging import log_execution_time as an_yeu_lananh
+import instructor
+from openai import AsyncOpenAI
+from pydantic import BaseModel, Field
 import json
 import eng_to_ipa as ipa
+from config.settings import OPENAI_API_KEY
+from utils.phoneme import update_transcription_error_indices
 
+class PhonemeErrorDetail(BaseModel):
+    transcribedWord: str
+    expectedWord: str
+    expectedPronunciation: str
+    actualPronunciation: str
+    errorType: Literal["substitution", "omission"]
+    errorStartIndexWord: int
+    errorStartIndexTranscription: Optional[int]
+    errorEndIndexTranscription: Optional[int]
+    errorEndIndexWord: int
+    substituted: str
+    errorDescription: str = Field(..., max_length=150)
+    improvementAdvice: str = Field(..., max_length=150)
+
+class PronunciationAnalysisResponse(BaseModel):
+    actualPhoneticTranscription: str
+    expectedPhoneticTranscription: str
+    phonemeErrorDetails: list[PhonemeErrorDetail]
 
 class PronunciationEvaluationService:
+    client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+    instructor_client = instructor.from_openai(client, mode=instructor.Mode.JSON)
     def __init__(self):
-        pass
-
+        pass    
     PREDICTION_PROMPT = (
         "You are an expert in phonetic transcription and pronunciation analysis. "
         "Your task is to predict the intended words based on the given actual text "
@@ -117,11 +132,12 @@ class PronunciationEvaluationService:
         ```
     """
 
+    @an_yeu_lananh
     @staticmethod
-    def predict_intended_word(actual_text: str, actual_ipa: str) -> str:
+    async def predict_intended_word(actual_text: str, actual_ipa: str) -> str:
         """Predicts the intended words based on phonetic transcription and logical context."""
-        response = client.chat.completions.create(
-            model="gpt-4o",
+        response = await PronunciationEvaluationService.instructor_client.chat.completions.create(
+            model="gpt-4o-mini",
             messages=[
                 {
                     "role": "system",
@@ -137,10 +153,12 @@ class PronunciationEvaluationService:
                     ),
                 },
             ],
+            response_model=str,
             temperature=0,
-        )
-        return response.choices[0].message.content.strip()
-
+        )   
+        return response
+    
+    
     @staticmethod
     def generate_comparison_prompt(
         actual_word: str, expect_word: str, actual_ipa: str, expected_ipa: str
@@ -155,29 +173,18 @@ class PronunciationEvaluationService:
         IDENTIFY ALL PRONUNCIATION ERROR AND PROVIDE ANALYSIS FOLLOWING THE SCHEMA EXACTLY.
         """
 
+    @an_yeu_lananh
     @staticmethod
-    def compare_phonemes(
-        actual_word: str, expected_word: str, actual_ipa: str, expected_ipa: str
-    ) -> Json:
-        """
-        Enhanced comparison of IPA strings with better prompting and validation.
-
-        Args:
-            actual_word: The word or phrase being analyzed
-            actual_ipa: The IPA string of the actual pronunciation
-            expected_ipa: The IPA string of the expected pronunciation
-
-        Returns:
-            Dictionary containing error analysis in the specified schema
-        """
+    async def compare_phonemes(actual_word: str, expected_word: str, actual_ipa: str, expected_ipa: str) -> list[PhonemeErrorDetail]:
         prompt = PronunciationEvaluationService.generate_comparison_prompt(
             actual_word, expected_word, actual_ipa, expected_ipa
         )
         result = {}
         result["actualPhoneticTranscription"] = actual_ipa
         result["expectedPhoneticTranscription"] = expected_ipa
-        response = client.chat.completions.create(
-            model="gpt-4",
+        
+        response = await PronunciationEvaluationService.instructor_client.chat.completions.create(
+            model="gpt-4o-mini",
             messages=[
                 {
                     "role": "system",
@@ -185,23 +192,36 @@ class PronunciationEvaluationService:
                 },
                 {"role": "user", "content": prompt},
             ],
+            response_model= Iterable[PhonemeErrorDetail],
             temperature=0,
         )
+        return response
 
-        phonemeErrorDetails = json.loads(response.choices[0].message.content)
-        result["phonemeErrorDetails"] = phonemeErrorDetails
-        return result
 
+    @an_yeu_lananh
     @staticmethod
-    async def pronunciation_assessment(actual_text: str) -> Json:
+    async def pronunciation_assessment(actual_text: str) -> PronunciationAnalysisResponse:
+        """Analyzes pronunciation by detecting errors in phonetic transcription."""
         actualPhoneticTranscription = ipa.convert(actual_text)
-        expected_text = PronunciationEvaluationService.predict_intended_word(
-            actual_text, actualPhoneticTranscription
-        )
+        expected_text = await PronunciationEvaluationService.predict_intended_word(actual_text, actualPhoneticTranscription)
         expectedPhoneticTranscription = ipa.convert(expected_text)
-        return PronunciationEvaluationService.compare_phonemes(
-            actual_text,
-            expected_text,
-            actualPhoneticTranscription,
-            expectedPhoneticTranscription,
+
+        phoneme_errors = await PronunciationEvaluationService.compare_phonemes(
+            actual_text, expected_text, actualPhoneticTranscription, expectedPhoneticTranscription
         )
+        phoneme_errors = update_transcription_error_indices(actual_text, phoneme_errors)
+
+        return PronunciationAnalysisResponse(
+            actualPhoneticTranscription=actualPhoneticTranscription,
+            expectedPhoneticTranscription=expectedPhoneticTranscription,
+            phonemeErrorDetails=phoneme_errors
+        )
+
+
+if __name__ == "__main__":
+    actual_text = "I rarely like reading English. I find it youthful."
+    async def main():
+        result = await PronunciationEvaluationService.pronunciation_assessment(actual_text)
+        print(json.dumps(result.model_dump(), indent = 4, ensure_ascii= True))
+    import asyncio
+    asyncio.run(main())
